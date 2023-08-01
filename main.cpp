@@ -24,22 +24,21 @@ void LcdTypeLine(const std::string& line);
 void LcdTypeChar(char c);
 void LcdClear();
 void LcdSetLine(int line);
+void LcdStoreSmallHeartsToGCRam();
+void LcdStoreLargeHeartToGCRam();
+
+void FillScreenWithHearts();
+void FallingHeartsRoutine();
+void LargePumpingHeartsRoutine();
+void CctfLovesYouRoutine();
+void CreateSmallHeart(int position);
+void CreateLargeHeart(int position);
 
 int fd;
 
 int main()
 {
     std::cout << "Running Assembly decoration program." << std::endl;
-
-    std::vector<GpioControllerImpl> ledColumns;
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 20));
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 16));
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 12));
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 21));
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 19));
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 25));
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 26));
-    ledColumns.push_back(GpioControllerImpl(std::make_shared<FileIoImpl>(), Direction::Out, 6));
 
 
     if (wiringPiSetup() == -1)
@@ -52,36 +51,154 @@ int main()
     std::cout << "Wiring PI I2C setup ready." << std::endl;
 
     LcdInit();
-    std::cout << "LCR init ready" << std::endl;
-    LcdSetLine(LINE1);
-    std::cout << "LCD line set." << std::endl;
-    LcdTypeLine("CCTF loves you!");
-    std::cout << "Line typed." << std::endl;
 
     // LCD I2C pin mappings
     // rs=0, rw=1, en=2, backlight=3, d4=4, d5=5, d6=6, d7=7
 
-
-    size_t column = 0;
     while(true)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        for(size_t i = 0; i < ledColumns.size(); i++)
+        FillScreenWithHearts();
+        LcdClear();
+        LargePumpingHeartsRoutine();
+        LcdClear();
+        FallingHeartsRoutine();
+        LcdClear();
+        CctfLovesYouRoutine();
+        LcdClear();
+    }
+    return 0;
+}
+
+void FillScreenWithHearts()
+{
+    LcdStoreSmallHeartsToGCRam();
+    LcdSetLine(LINE1);
+    for(int i = 0; i < 16; i++)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        LcdSendByte(0x01, LCD_DATA_MODE);
+    }
+    LcdSetLine(LINE2);
+    for(int i = 0; i < 16; i++)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        LcdSendByte(0x01, LCD_DATA_MODE);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+}
+
+void LargePumpingHeartsRoutine()
+{
+    LcdStoreLargeHeartToGCRam();
+    for(int i = 0; i < 16; i++)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        if(i % 2 == 0)
         {
-            if(i == column)
+            CreateLargeHeart(0);
+            CreateLargeHeart(3);
+            CreateLargeHeart(6);
+            CreateLargeHeart(9);
+            CreateLargeHeart(12);
+        }
+        else
+        {
+            CreateSmallHeart(0);
+            CreateSmallHeart(3);
+            CreateSmallHeart(6);
+            CreateSmallHeart(9);
+            CreateSmallHeart(12);
+        }
+    }
+
+}
+
+void CreateSmallHeart(int position)
+{
+    LcdSetLine(LINE1 + position);
+    LcdSendByte(0x03, LCD_DATA_MODE);
+    LcdSetLine(LINE1 + position + 1);
+    LcdSendByte(0x04, LCD_DATA_MODE);
+    LcdSetLine(LINE2 + position);
+    LcdSendByte(0x05, LCD_DATA_MODE);
+    LcdSetLine(LINE2 + position + 1);
+    LcdSendByte(0x06, LCD_DATA_MODE);
+}
+
+void CreateLargeHeart(int position)
+{
+    LcdSetLine(LINE1 + position);
+    LcdSendByte(0x00, LCD_DATA_MODE);
+    LcdSetLine(LINE1 + position + 1);
+    LcdSendByte(0x00, LCD_DATA_MODE);
+    LcdSetLine(LINE2 + position);
+    LcdSendByte(0x01, LCD_DATA_MODE);
+    LcdSetLine(LINE2 + position + 1);
+    LcdSendByte(0x02, LCD_DATA_MODE);
+}
+
+void FallingHeartsRoutine()
+{
+    size_t animationFrame = 0;
+    size_t nextAnimationFrame = 2;
+
+    LcdStoreSmallHeartsToGCRam();
+
+    for(int i = 0; i < 16; i++)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+        for(int character = 0; character < 16; character+=2)
+        {
+            auto isEvenCharacter = character % 4 == 0; 
+            if(isEvenCharacter)
             {
-                ledColumns[i].Write(PinValue::High);
+                LcdSetLine(LINE1 + character);
+                LcdSendByte(animationFrame, LCD_DATA_MODE);
+                LcdSetLine(LINE2 + character);
+                LcdSendByte(animationFrame, LCD_DATA_MODE);
             }
             else
             {
-                ledColumns[i].Write(PinValue::Low);
+                LcdSetLine(LINE1 + character);
+                LcdSendByte(nextAnimationFrame, LCD_DATA_MODE);
+                LcdSetLine(LINE2 + character);
+                LcdSendByte(nextAnimationFrame, LCD_DATA_MODE);
             }
         }
 
-        column++;
-        column %= 8;
+        animationFrame++;
+        animationFrame %= 4;
+
+        nextAnimationFrame++;
+        nextAnimationFrame %= 4;
     }
-    return 0;
+}
+
+void CctfLovesYouRoutine()
+{
+    size_t animationFrame = 0;
+    LcdSetLine(LINE1 + 1);
+    LcdTypeLine("CCTF loves you");
+
+    LcdStoreSmallHeartsToGCRam();
+
+    for(int i = 0; i < 16; i++)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+        LcdSetLine(LINE1);
+        LcdSendByte(animationFrame, LCD_DATA_MODE);
+        LcdSetLine(LINE1 + 15);
+        LcdSendByte(animationFrame, LCD_DATA_MODE);
+        LcdSetLine(LINE2);
+        LcdSendByte(animationFrame, LCD_DATA_MODE);
+        LcdSetLine(LINE2 + 15);
+        LcdSendByte(animationFrame, LCD_DATA_MODE);
+
+        animationFrame++;
+        animationFrame %= 4;
+    }
 }
 
 
@@ -138,3 +255,138 @@ void LcdSetLine(int line)
 {
     LcdSendByte(line, LCD_COMMAND_MODE);
 }
+
+void LcdStoreSmallHeartsToGCRam()
+{
+    //Heart lines
+    const std::vector<char> heartLines = 
+    {
+        /******/
+        0b01010,
+        0b11111,
+        0b11111,
+        0b01110,
+        0b00100,
+        0b00000,
+        0b00000,
+        0b00000,
+        /******/
+        0b00000,
+        0b00000,
+        0b01010,
+        0b11111,
+        0b11111,
+        0b01110,
+        0b00100,
+        0b00000,
+        /******/
+        0b00100,
+        0b00000,
+        0b00000,
+        0b00000,
+        0b01010,
+        0b11111,
+        0b11111,
+        0b01110,
+        /******/
+        0b11111,
+        0b01110,
+        0b00100,
+        0b00000,
+        0b00000,
+        0b00000,
+        0b01010,
+        0b11111,
+        /******/
+    };
+
+    //Set CGRAM address
+    LcdSendByte(0x40, LCD_COMMAND_MODE);
+
+    //Set heart lines to CGRAM memory
+    for(auto line = heartLines.begin(); line != heartLines.end(); line++)
+    {
+        LcdSendByte(*line, LCD_DATA_MODE);
+    }
+}
+
+void LcdStoreLargeHeartToGCRam()
+{
+    //Heart lines
+    const std::vector<char> heartLines = 
+    {
+        /******/
+        0b00000,
+        0b00000,
+        0b00000,
+        0b01110,
+        0b11111,
+        0b11111,
+        0b11111,
+        0b11111,
+        /******/
+        0b11111,
+        0b01111,
+        0b00111,
+        0b00011,
+        0b00001,
+        0b00000,
+        0b00000,
+        0b00000,
+        /******/
+        0b11111,
+        0b11110,
+        0b11100,
+        0b11000,
+        0b10000,
+        0b00000,
+        0b00000,
+        0b00000,
+        /******/
+        0b00000,
+        0b00000,
+        0b00000,
+        0b00000,
+        0b00110,
+        0b01111,
+        0b01111,
+        0b01111,
+        /******/
+        0b00000,
+        0b00000,
+        0b00000,
+        0b00000,
+        0b01100,
+        0b11110,
+        0b11110,
+        0b11110,
+        /******/
+        0b01111,
+        0b00111,
+        0b00011,
+        0b00001,
+        0b00000,
+        0b00000,
+        0b00000,
+        0b00000,
+        /******/
+        0b11110,
+        0b11100,
+        0b11000,
+        0b10000,
+        0b00000,
+        0b00000,
+        0b00000,
+        0b00000,
+    };
+
+    //Set CGRAM address
+    LcdSendByte(0x40, LCD_COMMAND_MODE);
+
+    //Set heart lines to CGRAM memory
+    for(auto line = heartLines.begin(); line != heartLines.end(); line++)
+    {
+        LcdSendByte(*line, LCD_DATA_MODE);
+    }
+}
+
